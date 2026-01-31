@@ -2,7 +2,6 @@ import streamlit as st
 import cv2
 import tempfile
 import torch
-# 1. NEW IMPORT for robust rendering
 import streamlit.components.v1 as components
 from processor import TrafficProcessor
 from gis_utils import create_dashboard_map, convert_to_geojson
@@ -37,6 +36,7 @@ st.markdown("""
                 radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
         }
 
+        /* TYPOGRAPHY */
         h1, h2, h3 {
             font-family: 'Instrument Serif', serif !important;
             font-weight: 400 !important;
@@ -48,6 +48,7 @@ st.markdown("""
             background: linear-gradient(90deg, #EADDFF, #D0BCFF);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            margin-bottom: 0px !important;
         }
 
         p, div, label, button, .stMultiSelect, .stSelectbox, .stSlider {
@@ -76,12 +77,15 @@ st.markdown("""
 
         div[data-testid="stMetric"] > div { width: 100% !important; }
 
+        /* REVERTED EXPANDER STYLE (Glass Look) */
         div[data-testid="stExpander"] {
             background: rgba(20, 18, 24, 0.6);
             border-radius: 16px;
             padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        /* BUTTON STYLING */
         .stButton>button {
             background: rgba(208, 188, 255, 0.1) !important;
             backdrop-filter: blur(12px);
@@ -90,9 +94,10 @@ st.markdown("""
             color: #E6E1E5 !important;
             border-radius: 100px;
             font-weight: 600;
-            padding: 0.5rem 1.5rem;
+            padding: 0.25rem 1rem; 
             transition: all 0.3s ease;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
         }
 
         .stButton>button:hover {
@@ -125,56 +130,59 @@ if 'counted_ids' not in st.session_state:
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
 
-# --- HEADER & SETTINGS ---
-c1, c2 = st.columns([3, 1])
-with c1:
-    st.title("Autoflow GIS")
-    st.caption("Real-time AI Traffic Analysis")
-with c2:
-    if torch.cuda.is_available():
-        st.success(f"🚀 GPU Active: {torch.cuda.get_device_name(0)}")
-    else:
-        st.warning("⚠️ CPU Mode")
+# --- HEADER ---
+st.title("Autoflow GIS")
 
 # --- COLLAPSIBLE SETTINGS BAR ---
 with st.expander("⚙️ System Configuration", expanded=True):
-    s1, s2, s3 = st.columns([1, 2, 1])
-    with s1:
-        model_type = st.selectbox("AI Model", ["yolov8n.pt", "yolov8m.pt"], index=0)
-    with s2:
-        conf_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.35)
-    with s3:
-        st.write("") 
-        st.write("") 
-        if not st.session_state.processing_complete:
-            stop_button = st.button("🛑 Stop Session", use_container_width=True)
+    # Layout: Model | Threshold | GPU Status | Action Button
+    c_conf1, c_conf2, c_conf3, c_conf4 = st.columns([1.5, 2, 1.5, 1])
+    
+    with c_conf1:
+        model_type = st.selectbox("AI Model", ["yolov8n.pt", "yolov8m.pt"], index=0, label_visibility="collapsed")
+    
+    with c_conf2:
+        conf_threshold = st.slider("Confidence", 0.0, 1.0, 0.35, label_visibility="collapsed")
+
+    with c_conf3:
+        # GPU Indicator inside the config box
+        if torch.cuda.is_available():
+            st.markdown(f"<span style='color:#00ff00; font-weight:bold; font-size:0.9rem; line-height:2.5;'>⚡ GPU Mode (Fast)</span>", unsafe_allow_html=True)
         else:
-            if st.button("🔄 Re-run Analysis", use_container_width=True):
+            st.markdown(f"<span style='color:#ffaa00; font-weight:bold; font-size:0.9rem; line-height:2.5;'>🐢 CPU Mode (Slow)</span>", unsafe_allow_html=True)
+            
+    with c_conf4:
+        # Small Button
+        if not st.session_state.processing_complete:
+            stop_button = st.button("Stop", use_container_width=True)
+        else:
+            if st.button("Re-run", use_container_width=True):
                 st.session_state.processing_complete = False
                 st.rerun()
 
 # --- MAIN TABS ---
-tab_monitor, tab_gis = st.tabs(["📹 Live Vision", "🗺️ GIS Heatmap"])
+tab_monitor, tab_gis = st.tabs(["Live Vision", "GIS Heatmap"])
 
 with tab_monitor:
-    col_video, col_stats = st.columns([2, 1])
+    col_video, col_stats = st.columns([2.5, 1]) 
     
     with col_video:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         video_file = st.file_uploader("Upload Footage", type=['mp4', 'mov', 'avi'], label_visibility="collapsed")
         st_frame = st.empty()
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col_stats:
-        st.markdown("### ⬇️ Incoming")
+        # Incoming Section
+        st.markdown("### Incoming")
         c_in_1, c_in_2 = st.columns(2)
         m_in_car = c_in_1.empty()
         m_in_bike = c_in_2.empty()
         m_in_heavy = st.empty()
         
-        st.markdown("---")
+        st.write("") 
         
-        st.markdown("### ⬆️ Outgoing")
+        # Outgoing Section
+        st.markdown("### Outgoing")
         c_out_1, c_out_2 = st.columns(2)
         m_out_car = c_out_1.empty()
         m_out_bike = c_out_2.empty()
@@ -199,16 +207,16 @@ with tab_monitor:
             tfile.write(video_file.read())
             cap = cv2.VideoCapture(tfile.name)
             
-            status_text.info(f"Processing with {model_type}...")
+            status_text.caption(f"Processing with {model_type}...")
             
             while cap.isOpened():
                 if 'stop_button' in locals() and stop_button:
-                    status_text.warning("🛑 Stopped by User.")
+                    status_text.warning("Stopped.")
                     break
                     
                 success, frame = cap.read()
                 if not success:
-                    status_text.success("✅ Analysis Complete.")
+                    status_text.success("Complete.")
                     break
                 
                 # PROCESS
@@ -239,8 +247,8 @@ with tab_monitor:
             
         else:
             # 3. STATIC STATS
-            status_text.success("✅ Results Ready. Switch to 'GIS Heatmap' tab.")
-            st_frame.info("Video processing complete. Re-run analysis to view again.")
+            status_text.success("Analysis Complete.")
+            st_frame.info("Processing complete.")
             
             m_in_car.metric("Cars", st.session_state.counts["Incoming_Car"])
             m_in_bike.metric("Bikes", st.session_state.counts["Incoming_Bike"])
@@ -256,19 +264,12 @@ with tab_gis:
     
     with col_map:
         total_cars = sum(st.session_state.counts.values())
-        st.caption(f"Visualizing density for {total_cars} detected vehicles...")
         
-        # Create Robust Map
         folium_map = create_dashboard_map(st.session_state.counts)
-        
-        # --- THE FIX: USE STATIC HTML RENDERER ---
-        # This bypasses st_folium bugs and forces the map to draw.
-        # Height is set to 600px.
         map_html = folium_map._repr_html_()
         components.html(map_html, height=600)
         
     with col_data:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown("#### Export Data")
         st.caption("Download vector data for ArcGIS/QGIS.")
         
